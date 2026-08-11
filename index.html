@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Load & Performance Testing Dashboard</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js para gráficos em tempo real -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome para ícones -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cyber: {
+              bg: '#0f172a',
+              card: '#1e293b',
+              border: '#334155',
+              accent: '#38bdf8',
+              danger: '#ef4444',
+              success: '#22c55e',
+              warning: '#f59e0b'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+    
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-cyber-border pb-4 gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-cyber-accent flex items-center gap-2">
+          <i class="fa-solid fa-gauge-high"></i> Benchmark & Stress Lab
+        </h1>
+        <p class="text-xs text-slate-400 mt-1">Ferramenta Client-Side para Simulação de Carga e Análise de Latência Web</p>
+      </div>
+      <div class="flex items-center gap-2 text-xs bg-cyber-card border border-cyber-border px-3 py-1.5 rounded-lg text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>Execução 100% no Navegador (Client-Side)</span>
+      </div>
+    </header>
+
+    <!-- Disclaimer / Aviso Legal -->
+    <div class="bg-amber-950/40 border border-amber-500/40 text-amber-200 p-4 rounded-xl text-xs md:text-sm flex items-start gap-3 shadow-lg">
+      <i class="fa-solid fa-triangle-exclamation text-amber-400 text-lg mt-0.5"></i>
+      <div>
+        <strong class="font-semibold block text-amber-300 mb-0.5">Aviso Legal e Termos de Uso Ético:</strong>
+        Esta ferramenta destina-se exclusivamente ao teste de carga, auditoria de infraestrutura e análise de resiliência em servidores **próprios** ou para os quais você possui **autorização prévia e expressa por escrito**. O disparo não autorizado de alto volume de requisições pode violar termos de serviço e legislações vigentes.
+      </div>
+    </div>
+
+    <!-- Layout Principal -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Painel de Configuração -->
+      <div class="lg:col-span-1 bg-cyber-card border border-cyber-border rounded-xl p-5 shadow-xl flex flex-col justify-between">
+        <form id="testConfigForm" class="space-y-4">
+          <h2 class="text-base font-semibold text-slate-200 border-b border-cyber-border pb-2 flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-cyber-accent"></i> Parâmetros do Teste
+          </h2>
+
+          <!-- URL Alvo -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">URL Alvo (Target Endpoint)</label>
+            <div class="relative">
+              <input type="url" id="targetUrl" required placeholder="https://api.seusite.com/ping"
+                class="w-full bg-slate-900 border border-cyber-border rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyber-accent transition">
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1">Insira um endpoint acessível pelo navegador.</p>
+          </div>
+
+          <!-- Método HTTP -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Método HTTP</label>
+              <select id="httpMethod" class="w-full bg-slate-900 border border-cyber-border rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyber-accent">
+                <option value="GET">GET</option>
+                <option value="HEAD">HEAD</option>
+                <option value="POST">POST</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Modo de Requisição</label>
+              <select id="corsMode" class="w-full bg-slate-900 border border-cyber-border rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyber-accent">
+                <option value="cors">CORS Padrão</option>
+                <option value="no-cors">no-cors (Opaco)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Concorrência -->
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs font-medium text-slate-300">Concorrência (Threads/Workers)</label>
+              <span id="concurrencyValue" class="text-xs font-mono text-cyber-accent font-bold">10</span>
+            </div>
+            <input type="range" id="concurrency" min="1" max="50" value="10" 
+              class="w-full accent-cyber-accent bg-slate-800 rounded-lg cursor-pointer">
+            <p class="text-[10px] text-slate-400 mt-0.5">Número de loops paralelos de envio simultâneo.</p>
+          </div>
+
+          <!-- Intervalo/Delay -->
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs font-medium text-slate-300">Pausa entre disparos (ms)</label>
+              <span id="delayValue" class="text-xs font-mono text-cyber-accent font-bold">100 ms</span>
+            </div>
+            <input type="range" id="delay" min="0" max="1000" step="50" value="100" 
+              class="w-full accent-cyber-accent bg-slate-800 rounded-lg cursor-pointer">
+          </div>
+
+          <!-- Duração do Teste -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Duração Máxima (Segundos)</label>
+            <input type="number" id="maxDuration" min="5" max="300" value="30"
+              class="w-full bg-slate-900 border border-cyber-border rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyber-accent">
+          </div>
+
+          <!-- Botões de Controle -->
+          <div class="pt-2 flex gap-3">
+            <button type="submit" id="startBtn" 
+              class="flex-1 bg-cyber-accent hover:bg-sky-400 text-slate-950 font-bold py-2.5 px-4 rounded-lg text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20">
+              <i class="fa-solid fa-play"></i> Iniciar Teste
+            </button>
+            <button type="button" id="stopBtn" disabled
+              class="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 px-4 rounded-lg text-sm transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-stop"></i> Parar
+            </button>
+          </div>
+        </form>
+
+        <!-- Status Footer -->
+        <div class="mt-4 pt-3 border-t border-cyber-border/60 flex items-center justify-between text-xs text-slate-400">
+          <span>Status do Engine:</span>
+          <span id="engineStatus" class="font-mono text-slate-300 font-medium">Inativo</span>
+        </div>
+      </div>
+
+      <!-- Painel de Métricas e Gráficos -->
+      <div class="lg:col-span-2 space-y-6">
+
+        <!-- Métricas Rápidas -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-cyber-card border border-cyber-border rounded-xl p-4">
+            <span class="text-xs text-slate-400 block">Total Enviado</span>
+            <span id="statTotal" class="text-2xl font-bold font-mono text-slate-100 mt-1 block">0</span>
+          </div>
+
+          <div class="bg-cyber-card border border-cyber-border rounded-xl p-4">
+            <span class="text-xs text-slate-400 block">Sucesso / 2xx-3xx</span>
+            <span id="statSuccess" class="text-2xl font-bold font-mono text-emerald-400 mt-1 block">0</span>
+          </div>
+
+          <div class="bg-cyber-card border border-cyber-border rounded-xl p-4">
+            <span class="text-xs text-slate-400 block">Falhas / Erros</span>
+            <span id="statErrors" class="text-2xl font-bold font-mono text-rose-400 mt-1 block">0</span>
+          </div>
+
+          <div class="bg-cyber-card border border-cyber-border rounded-xl p-4">
+            <span class="text-xs text-slate-400 block">Vazão (RPS Atual)</span>
+            <span id="statRps" class="text-2xl font-bold font-mono text-cyber-accent mt-1 block">0.0</span>
+          </div>
+        </div>
+
+        <!-- Estatísticas de Latência -->
+        <div class="grid grid-cols-3 gap-4 bg-cyber-card border border-cyber-border rounded-xl p-4 text-center">
+          <div>
+            <span class="text-[11px] text-slate-400 uppercase tracking-wider block">Latência Mínima</span>
+            <span id="latMin" class="text-lg font-mono font-semibold text-slate-200">0 ms</span>
+          </div>
+          <div class="border-x border-cyber-border">
+            <span class="text-[11px] text-slate-400 uppercase tracking-wider block">Latência Média</span>
+            <span id="latAvg" class="text-lg font-mono font-semibold text-amber-400">0 ms</span>
+          </div>
+          <div>
+            <span class="text-[11px] text-slate-400 uppercase tracking-wider block">Latência Máxima</span>
+            <span id="latMax" class="text-lg font-mono font-semibold text-slate-200">0 ms</span>
+          </div>
+        </div>
+
+        <!-- Gráfico de Desempenho -->
+        <div class="bg-cyber-card border border-cyber-border rounded-xl p-5 shadow-xl">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <i class="fa-solid fa-chart-line text-cyber-accent"></i> Histórico de Latência (ms) & Vazão
+            </h3>
+            <span id="timerDisplay" class="text-xs font-mono bg-slate-900 border border-cyber-border px-2 py-1 rounded text-slate-300">
+              00:00
+            </span>
+          </div>
+          <div class="h-64">
+            <canvas id="performanceChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Lógica de Testes e Controle em JavaScript -->
+  <script>
+    // Elementos da Interface
+    const form = document.getElementById('testConfigForm');
+    const targetUrlInput = document.getElementById('targetUrl');
+    const httpMethodSelect = document.getElementById('httpMethod');
+    const corsModeSelect = document.getElementById('corsMode');
+    const concurrencyInput = document.getElementById('concurrency');
+    const concurrencyValue = document.getElementById('concurrencyValue');
+    const delayInput = document.getElementById('delay');
+    const delayValue = document.getElementById('delayValue');
+    const maxDurationInput = document.getElementById('maxDuration');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const engineStatus = document.getElementById('engineStatus');
+
+    // Métricas UI
+    const statTotal = document.getElementById('statTotal');
+    const statSuccess = document.getElementById('statSuccess');
+    const statErrors = document.getElementById('statErrors');
+    const statRps = document.getElementById('statRps');
+    const latMin = document.getElementById('latMin');
+    const latAvg = document.getElementById('latAvg');
+    const latMax = document.getElementById('latMax');
+    const timerDisplay = document.getElementById('timerDisplay');
+
+    // Estado da Aplicação
+    let isRunning = false;
+    let abortController = null;
+    let stats = {
+      total: 0,
+      success: 0,
+      errors: 0,
+      latencies: [],
+      minLat: Infinity,
+      maxLat: 0,
+      sumLat: 0,
+      recentRequests: 0
+    };
+    let startTime = 0;
+    let timerInterval = null;
+    let metricsInterval = null;
+
+    // Atualiza sliders
+    concurrencyInput.addEventListener('input', (e) => concurrencyValue.textContent = e.target.value);
+    delayInput.addEventListener('input', (e) => delayValue.textContent = `${e.target.value} ms`);
+
+    // Configuração do Chart.js
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Latência Média (ms)',
+            data: [],
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            fill: true,
+            tension: 0.3,
+            yAxisID: 'y'
+          },
+          {
+            label: 'RPS (Req/seg)',
+            data: [],
+            borderColor: '#38bdf8',
+            borderDash: [5, 5],
+            fill: false,
+            tension: 0.3,
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        scales: {
+          x: {
+            grid: { color: '#334155' },
+            ticks: { color: '#94a3b8', font: { size: 10 } }
+          },
+          y: {
+            type: 'linear',
+            position: 'left',
+            grid: { color: '#334155' },
+            ticks: { color: '#f59e0b', font: { size: 10 } },
+            title: { display: true, text: 'Latência (ms)', color: '#f59e0b' }
+          },
+          y1: {
+            type: 'linear',
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            ticks: { color: '#38bdf8', font: { size: 10 } },
+            title: { display: true, text: 'RPS', color: '#38bdf8' }
+          }
+        },
+        plugins: {
+          legend: { labels: { color: '#f8fafc', font: { size: 11 } } }
+        }
+      }
+    });
+
+    // Iniciar Teste
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (isRunning) return;
+
+      resetStats();
+      isRunning = true;
+      abortController = new AbortController();
+
+      // UI States
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      engineStatus.textContent = 'Executando...';
+      engineStatus.className = 'font-mono text-emerald-400 font-bold animate-pulse';
+
+      startTime = Date.now();
+      const concurrency = parseInt(concurrencyInput.value);
+      const delay = parseInt(delayInput.value);
+      const targetUrl = targetUrlInput.value;
+      const method = httpMethodSelect.value;
+      const mode = corsModeSelect.value;
+      const maxDuration = parseInt(maxDurationInput.value) * 1000;
+
+      // Inicia as Workers em paralelo
+      for (let i = 0; i < concurrency; i++) {
+        runWorker(targetUrl, method, mode, delay, abortController.signal);
+      }
+
+      // Cronômetro e Atualizações
+      timerInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const seconds = Math.floor(elapsed / 1000);
+        const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const secs = (seconds % 60).toString().padStart(2, '0');
+        timerDisplay.textContent = `${mins}:${secs}`;
+
+        if (elapsed >= maxDuration) {
+          stopTest('Duração máxima atingida');
+        }
+      }, 1000);
+
+      // Atualizador de Gráficos e RPS a cada 1 segundo
+      metricsInterval = setInterval(() => {
+        const rps = stats.recentRequests;
+        stats.recentRequests = 0;
+        statRps.textContent = rps.toFixed(1);
+
+        const currentAvgLat = stats.total > 0 ? Math.round(stats.sumLat / stats.total) : 0;
+
+        // Atualiza gráfico
+        const nowStr = new Date().toLocaleTimeString([], { minute: '2-digit', second: '2-digit' });
+        chart.data.labels.push(nowStr);
+        chart.data.datasets[0].data.push(currentAvgLat);
+        chart.data.datasets[1].data.push(rps);
+
+        if (chart.data.labels.length > 20) {
+          chart.data.labels.shift();
+          chart.data.datasets[0].data.shift();
+          chart.data.datasets[1].data.shift();
+        }
+        chart.update();
+      }, 1000);
+    });
+
+    // Worker Loop
+    async function runWorker(url, method, mode, delay, signal) {
+      while (isRunning && !signal.aborted) {
+        const reqStart = performance.now();
+        try {
+          const response = await fetch(url, {
+            method: method,
+            mode: mode,
+            cache: 'no-store',
+            signal: signal
+          });
+
+          const reqEnd = performance.now();
+          const latency = Math.round(reqEnd - reqStart);
+
+          recordSuccess(latency);
+        } catch (err) {
+          if (err.name === 'AbortError') break;
+          const reqEnd = performance.now();
+          const latency = Math.round(reqEnd - reqStart);
+          recordError(latency);
+        }
+
+        if (delay > 0) {
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+    }
+
+    // Registra Sucesso
+    function recordSuccess(lat) {
+      stats.total++;
+      stats.success++;
+      stats.recentRequests++;
+      updateLatencyStats(lat);
+      updateUI();
+    }
+
+    // Registra Erro
+    function recordError(lat) {
+      stats.total++;
+      stats.errors++;
+      stats.recentRequests++;
+      updateLatencyStats(lat);
+      updateUI();
+    }
+
+    // Atualiza Métricas de Latência
+    function updateLatencyStats(lat) {
+      stats.sumLat += lat;
+      if (lat < stats.minLat) stats.minLat = lat;
+      if (lat > stats.maxLat) stats.maxLat = lat;
+    }
+
+    // Atualiza Elementos do DOM
+    function updateUI() {
+      statTotal.textContent = stats.total.toLocaleString();
+      statSuccess.textContent = stats.success.toLocaleString();
+      statErrors.textContent = stats.errors.toLocaleString();
+
+      if (stats.minLat !== Infinity) latMin.textContent = `${stats.minLat} ms`;
+      if (stats.maxLat !== 0) latMax.textContent = `${stats.maxLat} ms`;
+      if (stats.total > 0) {
+        latAvg.textContent = `${Math.round(stats.sumLat / stats.total)} ms`;
+      }
+    }
+
+    // Parar Teste
+    stopBtn.addEventListener('click', () => stopTest('Interrompido pelo usuário'));
+
+    function stopTest(reason = 'Finalizado') {
+      if (!isRunning) return;
+      isRunning = false;
+
+      if (abortController) abortController.abort();
+
+      clearInterval(timerInterval);
+      clearInterval(metricsInterval);
+
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+
+      engineStatus.textContent = reason;
+      engineStatus.className = 'font-mono text-amber-400 font-medium';
+    }
+
+    // Reset de Estatísticas
+    function resetStats() {
+      stats = {
+        total: 0,
+        success: 0,
+        errors: 0,
+        latencies: [],
+        minLat: Infinity,
+        maxLat: 0,
+        sumLat: 0,
+        recentRequests: 0
+      };
+      statTotal.textContent = '0';
+      statSuccess.textContent = '0';
+      statErrors.textContent = '0';
+      statRps.textContent = '0.0';
+      latMin.textContent = '0 ms';
+      latAvg.textContent = '0 ms';
+      latMax.textContent = '0 ms';
+      timerDisplay.textContent = '00:00';
+
+      chart.data.labels = [];
+      chart.data.datasets[0].data = [];
+      chart.data.datasets[1].data = [];
+      chart.update();
+    }
+  </script>
+</body>
+</html>
