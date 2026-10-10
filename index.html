@@ -82,7 +82,8 @@
               <input type="url" id="targetUrl" required placeholder="https://api.seusite.com/ping"
                 class="w-full bg-slate-900 border border-cyber-border rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyber-accent transition">
             </div>
-            <p class="text-[10px] text-slate-400 mt-1">Insira um endpoint acessível pelo navegador.</p>
+            <p class="text-[10px] text-slate-400 mt-1">Use apenas um servidor seu ou cujo teste foi autorizado.</p>
+            <label class="mt-2 flex items-start gap-2 text-[11px] text-amber-200"><input id="authorizationCheck" type="checkbox" required class="mt-0.5 accent-sky-400"><span>Confirmo que sou responsável pelo servidor ou tenho autorização explícita para testá-lo.</span></label>
           </div>
 
           <!-- Método HTTP -->
@@ -108,9 +109,9 @@
           <div>
             <div class="flex justify-between items-center mb-1">
               <label class="text-xs font-medium text-slate-300">Concorrência (Threads/Workers)</label>
-              <span id="concurrencyValue" class="text-xs font-mono text-cyber-accent font-bold">10</span>
+              <span id="concurrencyValue" class="text-xs font-mono text-cyber-accent font-bold">3</span>
             </div>
-            <input type="range" id="concurrency" min="1" max="50" value="10" 
+            <input type="range" id="concurrency" min="1" max="10" value="3" 
               class="w-full accent-cyber-accent bg-slate-800 rounded-lg cursor-pointer">
             <p class="text-[10px] text-slate-400 mt-0.5">Número de loops paralelos de envio simultâneo.</p>
           </div>
@@ -119,16 +120,16 @@
           <div>
             <div class="flex justify-between items-center mb-1">
               <label class="text-xs font-medium text-slate-300">Pausa entre disparos (ms)</label>
-              <span id="delayValue" class="text-xs font-mono text-cyber-accent font-bold">100 ms</span>
+              <span id="delayValue" class="text-xs font-mono text-cyber-accent font-bold">250 ms</span>
             </div>
-            <input type="range" id="delay" min="0" max="1000" step="50" value="100" 
+            <input type="range" id="delay" min="100" max="1000" step="50" value="250" 
               class="w-full accent-cyber-accent bg-slate-800 rounded-lg cursor-pointer">
           </div>
 
           <!-- Duração do Teste -->
           <div>
             <label class="block text-xs font-medium text-slate-300 mb-1">Duração Máxima (Segundos)</label>
-            <input type="number" id="maxDuration" min="5" max="300" value="30"
+            <input type="number" id="maxDuration" min="5" max="60" value="30"
               class="w-full bg-slate-900 border border-cyber-border rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyber-accent">
           </div>
 
@@ -163,12 +164,12 @@
           </div>
 
           <div class="bg-cyber-card border border-cyber-border rounded-xl p-4">
-            <span class="text-xs text-slate-400 block">Sucesso / 2xx-3xx</span>
+            <span class="text-xs text-slate-400 block">Respostas HTTP 2xx</span>
             <span id="statSuccess" class="text-2xl font-bold font-mono text-emerald-400 mt-1 block">0</span>
           </div>
 
           <div class="bg-cyber-card border border-cyber-border rounded-xl p-4">
-            <span class="text-xs text-slate-400 block">Falhas / Erros</span>
+            <span class="text-xs text-slate-400 block">HTTP não-2xx / falhas</span>
             <span id="statErrors" class="text-2xl font-bold font-mono text-rose-400 mt-1 block">0</span>
           </div>
 
@@ -251,7 +252,9 @@
       minLat: Infinity,
       maxLat: 0,
       sumLat: 0,
-      recentRequests: 0
+      recentRequests: 0,
+      recentLatencySum: 0,
+      recentLatencyCount: 0
     };
     let startTime = 0;
     let timerInterval = null;
@@ -336,10 +339,16 @@
       startTime = Date.now();
       const concurrency = parseInt(concurrencyInput.value);
       const delay = parseInt(delayInput.value);
-      const targetUrl = targetUrlInput.value;
+      const targetUrl = targetUrlInput.value.trim();
       const method = httpMethodSelect.value;
       const mode = corsModeSelect.value;
-      const maxDuration = parseInt(maxDurationInput.value) * 1000;
+      const durationSeconds = Number(maxDurationInput.value);
+      let parsedUrl;
+      try { parsedUrl = new URL(targetUrl); } catch { stopTest("URL inválida"); return; }
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) { stopTest("Use uma URL HTTP ou HTTPS"); return; }
+      if (!Number.isInteger(durationSeconds) || durationSeconds < 5 || durationSeconds > 60) { stopTest("Duração deve ser de 5 a 60 segundos"); return; }
+      if (Number(concurrencyInput.value) < 1 || Number(concurrencyInput.value) > 10 || Number(delayInput.value) < 100) { stopTest("Limites do teste inválidos"); return; }
+      const maxDuration = durationSeconds * 1000;
 
       // Inicia as Workers em paralelo
       for (let i = 0; i < concurrency; i++) {
@@ -365,7 +374,9 @@
         stats.recentRequests = 0;
         statRps.textContent = rps.toFixed(1);
 
-        const currentAvgLat = stats.total > 0 ? Math.round(stats.sumLat / stats.total) : 0;
+        const currentAvgLat = stats.recentLatencyCount > 0 ? Math.round(stats.recentLatencySum / stats.recentLatencyCount) : 0;
+        stats.recentLatencySum = 0;
+        stats.recentLatencyCount = 0;
 
         // Atualiza gráfico
         const nowStr = new Date().toLocaleTimeString([], { minute: '2-digit', second: '2-digit' });
@@ -387,17 +398,25 @@
       while (isRunning && !signal.aborted) {
         const reqStart = performance.now();
         try {
+          const timeoutSignal = AbortSignal.timeout(10000);
+          const requestSignal = AbortSignal.any([signal, timeoutSignal]);
           const response = await fetch(url, {
             method: method,
             mode: mode,
             cache: 'no-store',
-            signal: signal
+            signal: requestSignal
           });
 
           const reqEnd = performance.now();
           const latency = Math.round(reqEnd - reqStart);
 
-          recordSuccess(latency);
+          if (response.type === "opaque" || response.status === 0) {
+            recordError(latency);
+          } else if (response.ok) {
+            recordSuccess(latency);
+          } else {
+            recordError(latency);
+          }
         } catch (err) {
           if (err.name === 'AbortError') break;
           const reqEnd = performance.now();
@@ -416,6 +435,8 @@
       stats.total++;
       stats.success++;
       stats.recentRequests++;
+      stats.recentLatencySum += lat;
+      stats.recentLatencyCount++;
       updateLatencyStats(lat);
       updateUI();
     }
@@ -478,7 +499,9 @@
         minLat: Infinity,
         maxLat: 0,
         sumLat: 0,
-        recentRequests: 0
+        recentRequests: 0,
+        recentLatencySum: 0,
+        recentLatencyCount: 0
       };
       statTotal.textContent = '0';
       statSuccess.textContent = '0';
