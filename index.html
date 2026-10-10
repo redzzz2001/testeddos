@@ -446,6 +446,8 @@
       stats.total++;
       stats.errors++;
       stats.recentRequests++;
+      stats.recentLatencySum += lat;
+      stats.recentLatencyCount++;
       updateLatencyStats(lat);
       updateUI();
     }
